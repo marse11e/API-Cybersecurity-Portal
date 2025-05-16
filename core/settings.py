@@ -41,7 +41,7 @@ ALLOWED_HOSTS = ["*"]
 INSTALLED_APPS = [
     'jazzmin',
     'rest_framework',
-    # 'rest_framework.authtoken',
+    'corsheaders',
 
     'drf_yasg',
     'django_filters',
@@ -51,9 +51,14 @@ INSTALLED_APPS = [
 
 
 MIDDLEWARE = [
-
+    'corsheaders.middleware.CorsMiddleware',
 ] + DEFAULT_MIDDLEWARE
 
+CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+]
 
 TEMPLATES = [
     {

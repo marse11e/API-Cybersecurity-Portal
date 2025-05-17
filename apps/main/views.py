@@ -20,14 +20,17 @@ from .serializers import (
     DiscussionDetailSerializer, ReplySerializer, AchievementSerializer,
     UserAchievementSerializer, UserActivitySerializer, TestListSerializer,
     TestDetailSerializer, TestQuestionSerializer, TestAttemptSerializer,
-    TestResultSerializer
+    TestResultSerializer, SendEmailCodeSerializer, VerifyEmailCodeSerializer,
+    ResetPasswordByCodeSerializer
 )
 from .models import (
     User, Category, Tag, Article, Comment, Course, CourseSection, Lesson,
     CourseProgress, CourseMaterial, CourseReview, Discussion, Reply,
     Achievement, UserAchievement, UserActivity, Test, TestQuestion, TestAttempt,
-    TestResult
+    TestResult, EmailVerificationCode
 )
+from .utils import send_email_code
+import random
 
 # Пользовательские классы разрешений
 class IsOwnerOrReadOnly(permissions.BasePermission):
@@ -96,7 +99,18 @@ class UserViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def me(self, request):
-        serializer = self.get_serializer(request.user)
+        user = request.user
+        # Вычисляем статистику пользователя
+        courses_completed = user.course_progresses.filter(completed=True).values('lesson__section__course').distinct().count()
+        tests_completed = user.test_attempts.filter(status='completed').count()
+        articles_read = user.activities.filter(activity_type='article').count()
+        average_score = user.test_attempts.filter(status='completed').aggregate(avg=Avg('score'))['avg'] or 0
+        # Добавляем статистику к объекту пользователя (динамически)
+        user.courses_completed = courses_completed
+        user.tests_completed = tests_completed
+        user.articles_read = articles_read
+        user.average_score = int(average_score)
+        serializer = UserProfileSerializer(user)
         return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
@@ -358,6 +372,20 @@ class DiscussionViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return DiscussionListSerializer
         return DiscussionDetailSerializer
+    
+    def get_queryset(self):
+        queryset = Discussion.objects.all()
+        sort_by = self.request.query_params.get('sort_by', None)
+        
+        if sort_by:
+            if sort_by == 'newest':
+                queryset = queryset.order_by('-date')
+            elif sort_by == 'popular':
+                queryset = queryset.order_by('-likes')
+            elif sort_by == 'most_replies':
+                queryset = queryset.order_by('-replies')
+        
+        return queryset
     
     def get_permissions(self):
         if self.action in ['update', 'partial_update', 'destroy']:
@@ -736,16 +764,13 @@ class UserDashboardView(generics.GenericAPIView):
     
     def get(self, request):
         user = request.user
-        
         # Получаем последние активности
         activities = UserActivity.objects.filter(user=user).order_by('-date')[:5]
-        
         # Получаем прогресс по курсам
         course_progress = {}
         enrolled_courses = Course.objects.filter(
             sections__lessons__courseprogress__user=user
         ).distinct()
-        
         for course in enrolled_courses:
             lessons = Lesson.objects.filter(section__course=course)
             total_lessons = lessons.count()
@@ -754,7 +779,6 @@ class UserDashboardView(generics.GenericAPIView):
                 lesson__in=lessons,
                 completed=True
             ).count()
-            
             progress_percentage = (completed_lessons / total_lessons * 100) if total_lessons > 0 else 0
             course_progress[course.id] = {
                 'id': course.id,
@@ -763,13 +787,19 @@ class UserDashboardView(generics.GenericAPIView):
                 'total_lessons': total_lessons,
                 'progress_percentage': progress_percentage
             }
-        
         # Получаем результаты тестов
-        test_results = TestResult.objects.filter(user=user).order_by('-date_completed')[:5]
-        
+        test_results = TestResult.objects.filter(user=user).order_by('-created_at')[:5]
         # Получаем достижения
         achievements = UserAchievement.objects.filter(user=user).order_by('-date_earned')
-        
+        # Статистика пользователя
+        courses_completed = user.course_progresses.filter(completed=True).values('lesson__section__course').distinct().count()
+        tests_completed = user.test_attempts.filter(status='completed').count()
+        articles_read = user.activities.filter(activity_type='article').count()
+        average_score = user.test_attempts.filter(status='completed').aggregate(avg=Avg('score'))['avg'] or 0
+        user.courses_completed = courses_completed
+        user.tests_completed = tests_completed
+        user.articles_read = articles_read
+        user.average_score = int(average_score)
         # Собираем данные дашборда
         dashboard_data = {
             'user': UserProfileSerializer(user).data,
@@ -779,18 +809,51 @@ class UserDashboardView(generics.GenericAPIView):
             'achievements': UserAchievementSerializer(achievements, many=True).data,
             'stats': {
                 'courses_enrolled': enrolled_courses.count(),
-                'courses_completed': enrolled_courses.filter(
-                    sections__lessons__courseprogress__user=user,
-                    sections__lessons__courseprogress__completed=True
-                ).annotate(
-                    completed_count=Count('sections__lessons', filter=Q(sections__lessons__courseprogress__completed=True)),
-                    total_count=Count('sections__lessons')
-                ).filter(completed_count=F('total_count')).count(),
-                'tests_taken': TestAttempt.objects.filter(user=user, completed=True).count(),
-                'average_test_score': TestResult.objects.filter(user=user).aggregate(Avg('score'))['score__avg'] or 0,
+                'courses_completed': courses_completed,
+                'tests_taken': user.test_attempts.filter(status='completed').count(),
+                'average_test_score': average_score,
                 'discussions_created': Discussion.objects.filter(author=user).count(),
                 'replies_posted': Reply.objects.filter(user=user).count(),
             }
         }
-        
         return Response(dashboard_data)
+
+class SendEmailCodeAPIView(generics.GenericAPIView):
+    permission_classes = [AllowAny]
+    def post(self, request):
+        serializer = SendEmailCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+        code_type = serializer.validated_data['type']
+        # Генерируем 6-значный код
+        code = str(random.randint(100000, 999999))
+        # Деактивируем старые коды
+        EmailVerificationCode.objects.filter(email=email, type=code_type, is_used=False).update(is_used=True)
+        # Сохраняем новый код
+        EmailVerificationCode.objects.create(email=email, code=code, type=code_type)
+        # Отправляем email
+        send_email_code(email, code, code_type)
+        return Response({'detail': 'Код отправлен на email.'}, status=200)
+
+class VerifyEmailCodeAPIView(generics.GenericAPIView):
+    permission_classes = [AllowAny]
+    def post(self, request):
+        serializer = VerifyEmailCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        code_obj = serializer.validated_data['code_obj']
+        code_obj.is_used = True
+        code_obj.save()
+        return Response({'detail': 'Код подтвержден.'}, status=200)
+
+class ResetPasswordByCodeAPIView(generics.GenericAPIView):
+    permission_classes = [AllowAny]
+    def post(self, request):
+        serializer = ResetPasswordByCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        code_obj = serializer.validated_data['code_obj']
+        user = User.objects.get(email=serializer.validated_data['email'])
+        user.set_password(serializer.validated_data['new_password'])
+        user.save()
+        code_obj.is_used = True
+        code_obj.save()
+        return Response({'detail': 'Пароль успешно изменён.'}, status=200)

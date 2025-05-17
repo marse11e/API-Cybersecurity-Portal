@@ -147,3 +147,9 @@ MEDIA_ROOT = BASE_DIR / 'media/'
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+HOST = "smtp.gmail.com"
+PORT = 587
+USE_TLS = True
+HOST_USER = "endless.key.2018@gmail.com"
+HOST_PASSWORD = "aangmphnwxjeloje"

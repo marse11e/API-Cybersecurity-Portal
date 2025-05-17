@@ -53,6 +53,7 @@ class Category(models.Model):
     class Meta:
         verbose_name = _('Категория')
         verbose_name_plural = _('Категории')
+        ordering = ['name']
     
     def __str__(self):
         return self.name
@@ -749,3 +750,26 @@ class TestResult(models.Model):
     
     def __str__(self):
         return f"{self.attempt.user.username} - {self.attempt.test.title} - {self.score_percent}%"
+
+
+# Модель для хранения кодов подтверждения email и сброса пароля
+class EmailVerificationCode(models.Model):
+    CODE_TYPE_CHOICES = [
+        ('register', 'Регистрация'),
+        ('reset', 'Сброс пароля'),
+    ]
+    email = models.EmailField(verbose_name=_('Email адрес'))
+    code = models.CharField(max_length=10, verbose_name=_('Код подтверждения'))
+    type = models.CharField(max_length=10, choices=CODE_TYPE_CHOICES, verbose_name=_('Тип кода'))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Время создания'))
+    is_used = models.BooleanField(default=False, verbose_name=_('Использован'))
+
+    class Meta:
+        verbose_name = _('Код подтверждения Email')
+        verbose_name_plural = _('Коды подтверждения Email')
+        indexes = [
+            models.Index(fields=['email', 'type', 'is_used']),
+        ]
+
+    def __str__(self):
+        return f'{self.email} - {self.type} - {self.code}'

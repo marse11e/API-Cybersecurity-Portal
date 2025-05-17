@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>{% if code_type == 'register' %}Подтверждение регистрации{% else %}Сброс пароля{% endif %}</title>
+    <style type="text/css">
+        /* Client-specific resets */
+        body, table, td, a {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+        table, td {
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+        img {
+            -ms-interpolation-mode: bicubic;
+            border: 0;
+        }
+        /* General styles */
+        body {
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 100% !important;
+            width: 100% !important;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: #f7f7f7;
+        }
+        /* iOS blue links */
+        a[x-apple-data-detectors] {
+            color: inherit !important;
+            text-decoration: none !important;
+            font-size: inherit !important;
+            font-family: inherit !important;
+            font-weight: inherit !important;
+            line-height: inherit !important;
+        }
+        /* Responsive styles */
+        @media screen and (max-width: 525px) {
+            .wrapper {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            .logo img {
+                margin: 0 auto !important;
+            }
+            .mobile-padding {
+                padding-left: 15px !important;
+                padding-right: 15px !important;
+            }
+            .mobile-full-width {
+                width: 100% !important;
+            }
+            .code-box {
+                padding: 15px 10px !important;
+            }
+            .code-text {
+                font-size: 26px !important;
+                letter-spacing: 4px !important;
+            }
+            .content-block {
+                padding: 20px 15px !important;
+            }
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f7f7f7;">
+    <!-- Preheader text (hidden) -->
+    <div style="display: none; max-height: 0px; overflow: hidden;">
+        {% if code_type == 'register' %}Код подтверждения для регистрации{% else %}Код для сброса пароля{% endif %}: {{ code }}
+    </div>
+    
+    <!-- Main container -->
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width: 100%; background-color: #f7f7f7;">
+        <tr>
+            <td align="center" valign="top" style="padding: 40px 10px;">
+                <!-- Email content -->
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" class="wrapper" style="max-width: 550px; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 3px 10px rgba(0,0,0,0.05);">
+                    <!-- Header with colored top border -->
+                    <tr>
+                        <td height="5" style="background: linear-gradient(to right, #0077FF, #3a95ff);"></td>
+                    </tr>
+                    
+                    <!-- Logo -->
+                    <tr>
+                        <td align="center" class="content-block" style="padding: 30px 30px 20px 30px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" class="logo">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/561/561127.png" alt="Cybersecurity Portal" width="70" height="70" style="display: block; border: 0;">
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Title -->
+                    <tr>
+                        <td align="center" class="content-block" style="padding: 0 30px 20px 30px;">
+                            <h1 style="margin: 0; color: #333333; font-size: 22px; font-weight: 600; line-height: 1.4;">
+                                {% if code_type == 'register' %}
+                                    Подтверждение регистрации
+                                {% else %}
+                                    Сброс пароля
+                                {% endif %}
+                            </h1>
+                        </td>
+                    </tr>
+                    
+                    <!-- Main content -->
+                    <tr>
+                        <td class="content-block mobile-padding" style="padding: 0 30px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding: 0 0 25px 0; color: #555555; font-size: 16px; line-height: 1.5;">
+                                        {% if code_type == 'register' %}
+                                            Для завершения регистрации на <b style="color: #333333;">{{ email }}</b> введите этот код:
+                                        {% else %}
+                                            Для сброса пароля на <b style="color: #333333;">{{ email }}</b> введите этот код:
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                
+                                <!-- Verification code -->
+                                <tr>
+                                    <td align="center" style="padding: 0 0 25px 0;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 320px;">
+                                            <tr>
+                                                <td align="center" class="code-box" style="padding: 20px 15px; background-color: #f7f9fc; border-radius: 8px; border: 1px solid #e5e9f2;">
+                                                    <p class="code-text" style="margin: 0; color: #0077FF; font-size: 32px; font-weight: 700; letter-spacing: 6px;">{{ code }}</p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                
+                                <!-- Warning -->
+                                <tr>
+                                    <td align="center" style="padding: 0 0 30px 0;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 450px;">
+                                            <tr>
+                                                <td align="center" style="padding: 12px; background-color: #fffbf0; border-radius: 6px; border-left: 4px solid #ffc107;">
+                                                    <p style="margin: 0; color: #664d03; font-size: 14px; line-height: 1.5;">
+                                                        Код действителен <b>15 минут</b>. Никому не сообщайте этот код!
+                                                    </p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Divider -->
+                    <tr>
+                        <td class="content-block" style="padding: 0 30px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="height: 1px; background-color: #f0f0f0;"></td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td class="content-block" style="padding: 25px 30px 40px 30px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="color: #9e9e9e; font-size: 14px; line-height: 1.5;">
+                                        <p style="margin: 0 0 8px 0;">С уважением,<br>Команда Cybersecurity Portal</p>
+                                        <p style="margin: 0; font-size: 13px; color: #bdbdbd;">
+                                            Если вы не запрашивали это действие, пожалуйста, игнорируйте это письмо.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

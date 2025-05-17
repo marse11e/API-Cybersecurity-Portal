@@ -7,8 +7,10 @@ from .models import (
     User, Category, Tag, Article, Comment, Course, CourseSection, Lesson,
     CourseProgress, CourseMaterial, CourseReview, Discussion, Reply,
     Achievement, UserAchievement, UserActivity, Test, TestQuestion, TestAttempt, 
-    TestResult
+    TestResult, EmailVerificationCode
 )
+from django.utils import timezone
+from django.contrib.auth import authenticate
 
 # Пользовательский TokenObtainPairSerializer с дополнительными данными
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -91,10 +93,42 @@ class UserSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 class UserProfileSerializer(serializers.ModelSerializer):
-    """Упрощенный сериализатор для отображения информации о пользователе"""
+    """Упрощенный сериализатор для отображения информации о пользователе с расширенной статистикой"""
+    image = serializers.SerializerMethodField()
+    courses_completed = serializers.SerializerMethodField()
+    tests_completed = serializers.SerializerMethodField()
+    articles_read = serializers.SerializerMethodField()
+    average_score = serializers.SerializerMethodField()
+    date_joined = serializers.DateField(source='join_date', read_only=True)
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'avatar', 'role', 'join_date']
+        fields = [
+            'id', 'username', 'email', 'avatar', 'image', 'role', 'join_date', 'date_joined',
+            'courses_completed', 'tests_completed', 'articles_read', 'average_score',
+            'first_name', 'last_name'
+        ]
+
+    def get_image(self, obj):
+        if obj.avatar:
+            try:
+                return obj.avatar.url
+            except Exception:
+                return None
+        return None
+
+    def get_courses_completed(self, obj):
+        # Можно заменить на реальную логику подсчёта завершённых курсов
+        return getattr(obj, 'courses_completed', 0)
+
+    def get_tests_completed(self, obj):
+        return getattr(obj, 'tests_completed', 0)
+
+    def get_articles_read(self, obj):
+        return getattr(obj, 'articles_read', 0)
+
+    def get_average_score(self, obj):
+        return getattr(obj, 'average_score', 0)
 
 # Сериализаторы для комментариев
 class RecursiveCommentSerializer(serializers.Serializer):
@@ -369,6 +403,7 @@ class DiscussionDetailSerializer(serializers.ModelSerializer):
             instance.tags.set(tags)
             
         return super().update(instance, validated_data)
+
 # Сериализаторы для тестов
 class TestQuestionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -482,12 +517,17 @@ class UserAchievementSerializer(serializers.ModelSerializer):
         write_only=True,
         source='achievement'
     )
-    
+    unlocked = serializers.SerializerMethodField()
+    date = serializers.DateTimeField(source='date_earned', read_only=True)
+
     class Meta:
         model = UserAchievement
-        fields = ['id', 'user', 'achievement', 'achievement_id', 'date_earned']
+        fields = ['id', 'user', 'achievement', 'achievement_id', 'date_earned', 'unlocked', 'date']
         read_only_fields = ['id', 'date_earned', 'user']
         
+    def get_unlocked(self, obj):
+        return True
+
     def create(self, validated_data):
         user = self.context['request'].user
         user_achievement = UserAchievement.objects.create(user=user, **validated_data)
@@ -496,13 +536,85 @@ class UserAchievementSerializer(serializers.ModelSerializer):
 # Сериализатор для активностей пользователя
 class UserActivitySerializer(serializers.ModelSerializer):
     user = UserProfileSerializer(read_only=True)
-    
+    description = serializers.SerializerMethodField()
+
     class Meta:
         model = UserActivity
-        fields = ['id', 'user', 'activity_type', 'title', 'date', 'progress', 'score']
+        fields = ['id', 'user', 'activity_type', 'title', 'date', 'progress', 'score', 'description']
         read_only_fields = ['id', 'date', 'user']
         
+    def get_description(self, obj):
+        # Если в модели нет поля description, можно формировать описание на лету
+        if hasattr(obj, 'description') and obj.description:
+            return obj.description
+        # Пример генерации описания
+        if obj.activity_type == 'course':
+            return f'Завершён курс: {obj.title}'
+        if obj.activity_type == 'test':
+            return f'Пройден тест: {obj.title}'
+        if obj.activity_type == 'article':
+            return f'Прочитана статья: {obj.title}'
+        if obj.activity_type == 'achievement':
+            return f'Получено достижение: {obj.title}'
+        return ''
+
     def create(self, validated_data):
         user = self.context['request'].user
         activity = UserActivity.objects.create(user=user, **validated_data)
         return activity
+
+# Сериализатор для отправки email-кода (регистрация/сброс пароля)
+class SendEmailCodeSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    type = serializers.ChoiceField(choices=EmailVerificationCode.CODE_TYPE_CHOICES)
+
+    def validate(self, attrs):
+        email = attrs['email']
+        code_type = attrs['type']
+        if code_type == 'register' and User.objects.filter(email=email).exists():
+            raise serializers.ValidationError({'email': 'Пользователь с таким email уже существует.'})
+        if code_type == 'reset' and not User.objects.filter(email=email).exists():
+            raise serializers.ValidationError({'email': 'Пользователь с таким email не найден.'})
+        return attrs
+
+# Сериализатор для подтверждения email-кода
+class VerifyEmailCodeSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField(max_length=10)
+    type = serializers.ChoiceField(choices=EmailVerificationCode.CODE_TYPE_CHOICES)
+
+    def validate(self, attrs):
+        email = attrs['email']
+        code = attrs['code']
+        code_type = attrs['type']
+        try:
+            code_obj = EmailVerificationCode.objects.get(email=email, code=code, type=code_type, is_used=False)
+        except EmailVerificationCode.DoesNotExist:
+            raise serializers.ValidationError({'code': 'Неверный или просроченный код.'})
+        # Проверка срока действия (например, 15 минут)
+        if (timezone.now() - code_obj.created_at).total_seconds() > 900:
+            raise serializers.ValidationError({'code': 'Срок действия кода истек.'})
+        attrs['code_obj'] = code_obj
+        return attrs
+
+# Сериализатор для сброса пароля по коду
+class ResetPasswordByCodeSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField(max_length=10)
+    new_password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        email = attrs['email']
+        code = attrs['code']
+        try:
+            code_obj = EmailVerificationCode.objects.get(email=email, code=code, type='reset', is_used=False)
+        except EmailVerificationCode.DoesNotExist:
+            raise serializers.ValidationError({'code': 'Неверный или просроченный код.'})
+        if (timezone.now() - code_obj.created_at).total_seconds() > 900:
+            raise serializers.ValidationError({'code': 'Срок действия кода истек.'})
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError({'new_password': 'Пароли не совпадают.'})
+        validate_password(attrs['new_password'])
+        attrs['code_obj'] = code_obj
+        return attrs

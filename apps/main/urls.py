@@ -42,7 +42,10 @@ api_v1_patterns = [
     path('auth/token/', views.CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/register/', views.UserViewSet.as_view({'post': 'register'}), name='register'),
-    
+    # Email подтверждение и восстановление пароля
+    path('auth/send-code/', views.SendEmailCodeAPIView.as_view(), name='send_email_code'),
+    path('auth/verify-code/', views.VerifyEmailCodeAPIView.as_view(), name='verify_email_code'),
+    path('auth/reset-password/', views.ResetPasswordByCodeAPIView.as_view(), name='reset_password_by_code'),
     # Специальные маршруты
     path('search/', views.SearchAPIView.as_view(), name='search'),
     path('dashboard/', views.UserDashboardView.as_view(), name='dashboard'),

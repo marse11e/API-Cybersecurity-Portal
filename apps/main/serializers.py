@@ -7,7 +7,7 @@ from .models import (
     User, Category, Tag, Article, Comment, Course, CourseSection, Lesson,
     CourseProgress, CourseMaterial, CourseReview, Discussion, Reply,
     Achievement, UserAchievement, UserActivity, Test, TestQuestion, TestAttempt, 
-    TestResult, EmailVerificationCode
+    TestResult, EmailVerificationCode, FavoriteCourse
 )
 from django.utils import timezone
 from django.contrib.auth import authenticate
@@ -618,3 +618,18 @@ class ResetPasswordByCodeSerializer(serializers.Serializer):
         validate_password(attrs['new_password'])
         attrs['code_obj'] = code_obj
         return attrs
+
+class FavoriteCourseSerializer(serializers.ModelSerializer):
+    user = UserProfileSerializer(read_only=True)
+    course = CourseListSerializer(read_only=True)
+    course_id = serializers.PrimaryKeyRelatedField(queryset=Course.objects.all(), write_only=True, source='course')
+
+    class Meta:
+        model = FavoriteCourse
+        fields = ['id', 'user', 'course', 'course_id', 'date_added']
+        read_only_fields = ['id', 'user', 'course', 'date_added']
+
+    def create(self, validated_data):
+        user = self.context['request'].user
+        favorite, created = FavoriteCourse.objects.get_or_create(user=user, course=validated_data['course'])
+        return favorite

@@ -773,3 +773,24 @@ class EmailVerificationCode(models.Model):
 
     def __str__(self):
         return f'{self.email} - {self.type} - {self.code}'
+
+
+class FavoriteCourse(models.Model):
+    """
+    Избранные курсы пользователя
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='favorite_courses',
+                            verbose_name=_('Пользователь'),
+                            help_text=_('Пользователь, добавивший курс в избранное'))
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='favorited_by',
+                              verbose_name=_('Курс'),
+                              help_text=_('Курс, добавленный в избранное'))
+    date_added = models.DateTimeField(auto_now_add=True, verbose_name=_('Дата добавления'))
+
+    class Meta:
+        verbose_name = _('Избранный курс')
+        verbose_name_plural = _('Избранные курсы')
+        unique_together = ['user', 'course']
+
+    def __str__(self):
+        return f'{self.user.username} - {self.course.title}'

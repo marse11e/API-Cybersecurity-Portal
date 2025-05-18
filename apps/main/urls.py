@@ -36,6 +36,9 @@ router.register(r'achievements', views.AchievementViewSet, basename='achievement
 router.register(r'user-achievements', views.UserAchievementViewSet, basename='user-achievements')
 router.register(r'user-activities', views.UserActivityViewSet, basename='user-activities')
 
+# Добавляем новый маршрут для избранных курсов
+router.register(r'favorite-courses', views.FavoriteCourseViewSet, basename='favorite-courses')
+
 # API маршруты версии 1
 api_v1_patterns = [
     # Аутентификация

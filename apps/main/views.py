@@ -21,13 +21,13 @@ from .serializers import (
     UserAchievementSerializer, UserActivitySerializer, TestListSerializer,
     TestDetailSerializer, TestQuestionSerializer, TestAttemptSerializer,
     TestResultSerializer, SendEmailCodeSerializer, VerifyEmailCodeSerializer,
-    ResetPasswordByCodeSerializer
+    ResetPasswordByCodeSerializer, FavoriteCourseSerializer
 )
 from .models import (
     User, Category, Tag, Article, Comment, Course, CourseSection, Lesson,
     CourseProgress, CourseMaterial, CourseReview, Discussion, Reply,
     Achievement, UserAchievement, UserActivity, Test, TestQuestion, TestAttempt,
-    TestResult, EmailVerificationCode
+    TestResult, EmailVerificationCode, FavoriteCourse
 )
 from .utils import send_email_code
 import random
@@ -166,7 +166,9 @@ class ArticleViewSet(viewsets.ModelViewSet):
         return ArticleDetailSerializer
     
     def get_permissions(self):
-        if self.action in ['update', 'partial_update', 'destroy']:
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        elif self.action in ['update', 'partial_update', 'destroy']:
             return [IsAuthenticated(), IsOwnerOrReadOnly()]
         elif self.action == 'create':
             return [IsAuthenticated()]
@@ -231,7 +233,9 @@ class CourseViewSet(viewsets.ModelViewSet):
         return CourseDetailSerializer
     
     def get_permissions(self):
-        if self.action in ['update', 'partial_update', 'destroy']:
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        elif self.action in ['update', 'partial_update', 'destroy']:
             return [IsAuthenticated(), IsOwnerOrReadOnly()]
         elif self.action == 'create':
             return [IsAuthenticated()]
@@ -263,6 +267,24 @@ class CourseViewSet(viewsets.ModelViewSet):
         featured = Course.objects.filter(featured=True)
         serializer = CourseListSerializer(featured, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def enroll(self, request, pk=None):
+        course = self.get_object()
+        user = request.user
+        # Получаем все уроки курса
+        lessons = course.sections.all().values_list('lessons__id', flat=True)
+        lessons = [lid for lid in lessons if lid]
+        if not lessons:
+            return Response({'error': 'В курсе нет уроков'}, status=status.HTTP_400_BAD_REQUEST)
+        # Проверяем, есть ли уже прогресс по этим урокам
+        existing = CourseProgress.objects.filter(user=user, lesson_id__in=lessons)
+        if existing.exists():
+            return Response({'detail': 'Вы уже записаны на этот курс.'}, status=200)
+        # Создаём прогресс по всем урокам
+        progresses = [CourseProgress(user=user, lesson_id=lid, completed=False) for lid in lessons]
+        CourseProgress.objects.bulk_create(progresses)
+        return Response({'detail': 'Вы успешно записались на курс.'}, status=201)
 
 # Представления для разделов курса
 class CourseSectionViewSet(viewsets.ModelViewSet):
@@ -388,7 +410,9 @@ class DiscussionViewSet(viewsets.ModelViewSet):
         return queryset
     
     def get_permissions(self):
-        if self.action in ['update', 'partial_update', 'destroy']:
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        elif self.action in ['update', 'partial_update', 'destroy']:
             return [IsAuthenticated(), IsOwnerOrReadOnly()]
         elif self.action == 'create':
             return [IsAuthenticated()]
@@ -491,7 +515,9 @@ class TestViewSet(viewsets.ModelViewSet):
         return TestDetailSerializer
     
     def get_permissions(self):
-        if self.action in ['update', 'partial_update', 'destroy']:
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        elif self.action in ['update', 'partial_update', 'destroy']:
             return [IsAuthenticated(), IsOwnerOrReadOnly()]
         elif self.action == 'create':
             return [IsAuthenticated()]
@@ -857,3 +883,15 @@ class ResetPasswordByCodeAPIView(generics.GenericAPIView):
         code_obj.is_used = True
         code_obj.save()
         return Response({'detail': 'Пароль успешно изменён.'}, status=200)
+
+class FavoriteCourseViewSet(viewsets.ModelViewSet):
+    serializer_class = FavoriteCourseSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['user', 'course']
+
+    def get_queryset(self):
+        user = self.request.user
+        return FavoriteCourse.objects.filter(user=user)
+
+    def get_permissions(self):
+        return [IsAuthenticated()]
